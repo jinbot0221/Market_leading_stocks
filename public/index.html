@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f7f3" />
+    <title>Market Flow — 실시간 주도주 탐색</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="Market Flow 홈">
+        <span class="brand-mark"><i></i><i></i><i></i></span>
+        <span>Market <strong>Flow</strong></span>
+      </a>
+      <div class="market-status"><span class="live-dot"></span><span id="connectionLabel">데이터 연결 중</span><b id="connectionMode">WAIT</b></div>
+      <button class="icon-button" id="refreshButton" aria-label="데이터 새로고침">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/></svg>
+      </button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">REAL-TIME MARKET RADAR</p>
+          <h1>지금 시장의 흐름을<br /><em>한발 먼저</em> 발견하세요.</h1>
+        </div>
+        <div class="hero-meta">
+          <span>마지막 업데이트</span>
+          <strong id="updatedAt">10:42:18</strong>
+          <small>3초마다 자동 갱신</small>
+        </div>
+      </section>
+
+      <section class="market-strip" aria-label="시장 지수">
+        <article><div><span>KOSPI</span><b>2,698.42</b></div><strong class="up">+0.82%</strong><div class="sparkline green" data-series="18,22,20,27,29,26,34,37,36,43,47,51"></div></article>
+        <article><div><span>KOSDAQ</span><b>869.21</b></div><strong class="up">+1.24%</strong><div class="sparkline green" data-series="14,16,15,20,22,19,25,28,27,32,38,42"></div></article>
+        <article><div><span>USD/KRW</span><b>1,364.80</b></div><strong class="down">−0.18%</strong><div class="sparkline red" data-series="38,37,40,35,34,36,31,33,29,27,28,24"></div></article>
+        <article class="breadth"><span>상승 종목</span><div><i style="--width: 67%"></i></div><b><em>612</em> / 912</b></article>
+      </section>
+
+      <section class="section-heading">
+        <div><span class="section-number">01</span><div><h2>전체 주도 섹터 <small id="visibleSectorCount">30개</small></h2><p>국내 시장 주요 30개 섹터 · 거래대금과 상승 종목 비중을 종합한 순위</p></div></div>
+        <div class="sector-filter" aria-label="섹터 필터"><button class="active" data-sector-filter="ALL">전체</button><button data-sector-filter="STRONG">강세</button><button data-sector-filter="UP">상승</button></div>
+      </section>
+
+      <section class="sector-grid" id="sectorGrid" aria-live="polite"></section>
+
+      <section class="history-panel">
+        <div class="section-heading compact">
+          <div><span class="section-number">HISTORY</span><div><h2>주도 섹터 흐름</h2><p>매일 저장된 1위 섹터의 강도 변화</p></div></div>
+          <strong id="historyCount">0일 기록</strong>
+        </div>
+        <div class="history-chart" id="historyChart"><p>오늘부터 기록을 쌓고 있어요.</p></div>
+      </section>
+
+      <section class="content-grid">
+        <div class="leaders-panel">
+          <div class="section-heading compact">
+            <div><span class="section-number">02</span><div><h2>실시간 주도주</h2><p>거래대금이 집중되는 종목</p></div></div>
+            <div class="tabs" role="tablist"><button class="active" data-market="ALL">전체</button><button data-market="KOSPI">코스피</button><button data-market="KOSDAQ">코스닥</button></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>순위 / 종목</th><th>현재가</th><th>등락률</th><th>거래대금</th><th>강도</th></tr></thead>
+              <tbody id="stockTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="signal-panel">
+          <div class="signal-header"><span><i></i> FLOW SIGNAL</span><small>AI 시장 요약</small></div>
+          <h3>반도체로 자금 유입이<br /><em>가속</em>되고 있어요.</h3>
+          <p>외국인 순매수와 거래대금이 동시에 증가하며 주도 강도가 오늘 최고 수준입니다.</p>
+          <div class="signal-stats"><div><span>섹터 거래대금</span><b>4.8조</b><small>+18.4%</small></div><div><span>외국인 순매수</span><b>2,840억</b><small>3일 연속</small></div></div>
+          <div class="flow-chart"><div class="chart-label"><span>09:00</span><span>현재</span></div><svg viewBox="0 0 400 100" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b9d542" stop-opacity=".35"/><stop offset="100%" stop-color="#b9d542" stop-opacity="0"/></linearGradient></defs><path class="area" d="M0 91 C30 89 35 75 64 79 S110 71 132 68 S170 75 198 55 S250 62 278 43 S320 39 345 22 S380 18 400 5 L400 100 L0 100Z"/><path class="line" d="M0 91 C30 89 35 75 64 79 S110 71 132 68 S170 75 198 55 S250 62 278 43 S320 39 345 22 S380 18 400 5"/></svg></div>
+        </aside>
+      </section>
+    </main>
+
+    <nav class="mobile-nav" aria-label="모바일 메뉴"><a class="active" href="#"><span>⌁</span>홈</a><a href="#sectorGrid"><span>◫</span>섹터</a><a href="#stockTable"><span>↗</span>주도주</a><a href="#"><span>○</span>설정</a></nav>
+    <div class="toast" id="toast">최신 데이터를 불러왔습니다.</div>
+    <script src="/app.js"></script>
+  </body>
+</html>
