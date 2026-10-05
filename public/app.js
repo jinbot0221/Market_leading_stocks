@@ -29,6 +29,7 @@ const sectors = [
   { name: '부동산 · 리츠', change: -0.71, strength: 19 },
   { name: '농업 · 비료', change: -0.83, strength: 17 },
   { name: '종이 · 목재', change: -0.96, strength: 15 },
+
 ];
 
 const stocks = [
@@ -40,6 +41,7 @@ const stocks = [
 ];
 
 const formatPrice = (value) => new Intl.NumberFormat('ko-KR').format(value);
+
 
 function renderSectors(filter = 'ALL') {
   const visible = filter === 'STRONG' ? sectors.filter((sector) => sector.strength >= 60)
@@ -57,6 +59,16 @@ function renderSectors(filter = 'ALL') {
     </article>`;
   }).join('');
   document.querySelector('#visibleSectorCount').textContent = `${visible.length}개`;
+
+function renderSectors() {
+  document.querySelector('#sectorGrid').innerHTML = sectors.map((sector, index) => `
+    <article class="sector-card">
+      <span class="sector-rank">0${index + 1}</span>
+      <h3>${sector.name}</h3>
+      <span class="change">+${sector.change.toFixed(2)}%</span>
+      <div class="strength"><div class="strength-label"><span>주도 강도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
+    </article>`).join('');
+
 }
 
 function renderStocks(market = 'ALL') {
@@ -135,6 +147,7 @@ document.querySelectorAll('.tabs button').forEach((button) => button.addEventLis
   button.classList.add('active');
   renderStocks(button.dataset.market);
 }));
+
 
 document.querySelectorAll('.sector-filter button').forEach((button) => button.addEventListener('click', () => {
   document.querySelector('.sector-filter button.active').classList.remove('active');
