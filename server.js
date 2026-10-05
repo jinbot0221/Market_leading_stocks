@@ -2,6 +2,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { HistoryStore } = require('./lib/history-store');
+const { IntradayStore } = require('./lib/intraday-store');
+const { createMarketRecorder, getKstClock } = require('./lib/market-recorder');
 const { loadEnv } = require('./lib/load-env');
 
 loadEnv(path.join(__dirname, '.env'));
@@ -10,6 +12,8 @@ const PORT = Number(process.env.PORT) || 4173;
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const HISTORY_FILE = process.env.HISTORY_FILE || path.join(__dirname, 'data', 'history.json');
+const INTRADAY_FILE = process.env.INTRADAY_FILE || path.join(__dirname, 'data', 'intraday.json');
+const TRACKED_SYMBOLS = (process.env.TOSS_SYMBOLS || '000660,042700,267260,196170,247540').split(',');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -77,7 +81,14 @@ async function getTossAccessToken() {
 
 function createServer(options = {}) {
   const historyStore = options.historyStore || new HistoryStore(HISTORY_FILE);
-  return http.createServer((request, response) => {
+  const intradayStore = options.intradayStore || new IntradayStore(INTRADAY_FILE);
+  const recorder = options.recorder === false ? null : (options.recorder || createMarketRecorder({
+    store: intradayStore,
+    fetchPrices: options.fetchPrices || fetchTossPrices,
+    symbols: TRACKED_SYMBOLS,
+    intervalMs: Number(process.env.RECORD_INTERVAL_MS) || 60_000,
+  }));
+  const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, `http://${request.headers.host || 'localhost'}`).pathname;
 
     if (pathname === '/api/history' && request.method === 'GET') {
@@ -93,6 +104,22 @@ function createServer(options = {}) {
         }
         sendJson(response, 201, { snapshot: historyStore.save(snapshot) });
       }).catch((error) => sendJson(response, 400, { error: error.message }));
+      return;
+    }
+
+    if (pathname === '/api/intraday' && request.method === 'GET') {
+      const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+      const date = url.searchParams.get('date') || getKstClock().date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        sendJson(response, 400, { error: 'date는 YYYY-MM-DD 형식이어야 합니다.' });
+        return;
+      }
+      sendJson(response, 200, intradayStore.getDate(date));
+      return;
+    }
+
+    if (pathname === '/api/recorder/status' && request.method === 'GET') {
+      sendJson(response, 200, recorder ? recorder.getStatus() : { state: 'disabled' });
       return;
     }
 
@@ -128,6 +155,9 @@ function createServer(options = {}) {
       response.end(content);
     });
   });
+  recorder?.start();
+  server.on('close', () => recorder?.stop());
+  return server;
 }
 
 if (require.main === module) {

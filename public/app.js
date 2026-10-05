@@ -29,7 +29,6 @@ const sectors = [
   { name: '부동산 · 리츠', change: -0.71, strength: 19 },
   { name: '농업 · 비료', change: -0.83, strength: 17 },
   { name: '종이 · 목재', change: -0.96, strength: 15 },
-
 ];
 
 const stocks = [
@@ -41,7 +40,6 @@ const stocks = [
 ];
 
 const formatPrice = (value) => new Intl.NumberFormat('ko-KR').format(value);
-
 
 function renderSectors(filter = 'ALL') {
   const visible = filter === 'STRONG' ? sectors.filter((sector) => sector.strength >= 60)
@@ -59,16 +57,6 @@ function renderSectors(filter = 'ALL') {
     </article>`;
   }).join('');
   document.querySelector('#visibleSectorCount').textContent = `${visible.length}개`;
-
-function renderSectors() {
-  document.querySelector('#sectorGrid').innerHTML = sectors.map((sector, index) => `
-    <article class="sector-card">
-      <span class="sector-rank">0${index + 1}</span>
-      <h3>${sector.name}</h3>
-      <span class="change">+${sector.change.toFixed(2)}%</span>
-      <div class="strength"><div class="strength-label"><span>주도 강도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
-    </article>`).join('');
-
 }
 
 function renderStocks(market = 'ALL') {
@@ -110,6 +98,7 @@ async function connectToss() {
       label.textContent = '토스증권 실시간';
       badge.textContent = 'LIVE';
       renderStocks(document.querySelector('.tabs button.active').dataset.market);
+      document.querySelector('#refreshStatus').textContent = `${new Date().toLocaleTimeString('ko-KR')} 갱신 완료`;
     } else {
       label.textContent = '샘플 데이터';
       badge.textContent = 'DEMO';
@@ -117,7 +106,32 @@ async function connectToss() {
   } catch {
     document.querySelector('#connectionLabel').textContent = '연결 확인 필요';
     document.querySelector('#connectionMode').textContent = 'OFF';
+    document.querySelector('#refreshStatus').textContent = '자동 갱신 재시도 중';
   }
+}
+
+async function updateRecorderStatus() {
+  try {
+    const [statusResponse, dataResponse] = await Promise.all([fetch('/api/recorder/status'), fetch('/api/intraday')]);
+    const status = await statusResponse.json();
+    const day = await dataResponse.json();
+    const labels = {
+      recording: '기록 중', 'outside-hours': '기록 시간 대기',
+      'credentials-required': 'API 인증 필요', error: '기록 오류', waiting: '시작 대기',
+    };
+    document.querySelector('#recorderState').textContent = labels[status.state] || status.state;
+    document.querySelector('#snapshotCount').textContent = `오늘 ${day.snapshots.length}개 저장`;
+  } catch {
+    document.querySelector('#recorderState').textContent = '상태 확인 실패';
+  }
+}
+
+function startAutoRefresh() {
+  const refresh = async () => {
+    await Promise.all([connectToss(), updateRecorderStatus()]);
+    window.setTimeout(refresh, 5000);
+  };
+  refresh();
 }
 
 function renderHistory(history) {
@@ -148,7 +162,6 @@ document.querySelectorAll('.tabs button').forEach((button) => button.addEventLis
   renderStocks(button.dataset.market);
 }));
 
-
 document.querySelectorAll('.sector-filter button').forEach((button) => button.addEventListener('click', () => {
   document.querySelector('.sector-filter button.active').classList.remove('active');
   button.classList.add('active');
@@ -167,7 +180,6 @@ renderSectors();
 renderStocks();
 renderSparklines();
 updateClock();
-connectToss();
 saveAndLoadHistory();
+startAutoRefresh();
 setInterval(updateClock, 3000);
-setInterval(connectToss, 5000);

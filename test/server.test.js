@@ -7,7 +7,7 @@ const { createServer, safeFilePath } = require('../server');
 const { HistoryStore } = require('../lib/history-store');
 
 test('serves the dashboard and static assets', async (t) => {
-  const server = createServer().listen(0, '127.0.0.1');
+  const server = createServer({ recorder: false }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => server.close());
   const { port } = server.address();
@@ -25,7 +25,7 @@ test('serves the dashboard and static assets', async (t) => {
 test('stores one snapshot per date and exposes history', async (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'market-flow-'));
   const store = new HistoryStore(path.join(directory, 'history.json'));
-  const server = createServer({ historyStore: store }).listen(0, '127.0.0.1');
+  const server = createServer({ historyStore: store, recorder: false }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => { server.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${server.address().port}`;
