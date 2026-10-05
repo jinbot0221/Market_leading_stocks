@@ -2,6 +2,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { HistoryStore } = require('./lib/history-store');
+const { IntradayStore } = require('./lib/intraday-store');
+const { createMarketRecorder, getKstClock } = require('./lib/market-recorder');
 const { loadEnv } = require('./lib/load-env');
 
 loadEnv(path.join(__dirname, '.env'));
@@ -10,6 +12,8 @@ const PORT = Number(process.env.PORT) || 4173;
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const HISTORY_FILE = process.env.HISTORY_FILE || path.join(__dirname, 'data', 'history.json');
+const INTRADAY_FILE = process.env.INTRADAY_FILE || path.join(__dirname, 'data', 'intraday.json');
+const TRACKED_SYMBOLS = (process.env.TOSS_SYMBOLS || '000660,042700,267260,196170,247540').split(',');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -44,15 +48,35 @@ function readBody(request) {
   });
 }
 
-async function fetchTossPrices(symbols, token = process.env.TOSS_ACCESS_TOKEN) {
-  token ||= await getTossAccessToken();
+async function requestTossPrices(symbols, token, fetchImpl = fetch) {
   if (!token) return { mode: 'sample', result: [] };
   const query = encodeURIComponent(symbols.join(','));
-  const result = await fetch(`https://openapi.tossinvest.com/api/v1/prices?symbols=${query}`, {
+  const result = await fetchImpl(`https://openapi.tossinvest.com/api/v1/prices?symbols=${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!result.ok) throw new Error(`Toss API ${result.status}`);
+  if (!result.ok) {
+    let detail;
+    try {
+      const payload = await result.json();
+      detail = payload.error?.message || payload.message;
+    } catch { /* 응답 본문이 JSON이 아닐 수 있습니다. */ }
+    const error = new Error(detail || `토스증권 API 응답 오류 (${result.status})`);
+    error.status = result.status;
+    throw error;
+  }
   return { mode: 'live', ...(await result.json()) };
+}
+
+async function fetchTossPrices(symbols, providedToken = process.env.TOSS_ACCESS_TOKEN) {
+  const token = providedToken || await getTossAccessToken();
+  try {
+    return await requestTossPrices(symbols, token);
+  } catch (error) {
+    // 직접 입력한 토큰이 아니라면 만료된 캐시를 비우고 한 번만 자동 재발급합니다.
+    if (error.status !== 401 || providedToken) throw error;
+    tokenCache = { value: null, expiresAt: 0 };
+    return requestTossPrices(symbols, await getTossAccessToken());
+  }
 }
 
 let tokenCache = { value: null, expiresAt: 0 };
@@ -77,7 +101,14 @@ async function getTossAccessToken() {
 
 function createServer(options = {}) {
   const historyStore = options.historyStore || new HistoryStore(HISTORY_FILE);
-  return http.createServer((request, response) => {
+  const intradayStore = options.intradayStore || new IntradayStore(INTRADAY_FILE);
+  const recorder = options.recorder === false ? null : (options.recorder || createMarketRecorder({
+    store: intradayStore,
+    fetchPrices: options.fetchPrices || fetchTossPrices,
+    symbols: TRACKED_SYMBOLS,
+    intervalMs: Number(process.env.RECORD_INTERVAL_MS) || 60_000,
+  }));
+  const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, `http://${request.headers.host || 'localhost'}`).pathname;
 
     if (pathname === '/api/history' && request.method === 'GET') {
@@ -96,6 +127,22 @@ function createServer(options = {}) {
       return;
     }
 
+    if (pathname === '/api/intraday' && request.method === 'GET') {
+      const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+      const date = url.searchParams.get('date') || getKstClock().date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        sendJson(response, 400, { error: 'date는 YYYY-MM-DD 형식이어야 합니다.' });
+        return;
+      }
+      sendJson(response, 200, intradayStore.getDate(date));
+      return;
+    }
+
+    if (pathname === '/api/recorder/status' && request.method === 'GET') {
+      sendJson(response, 200, recorder ? recorder.getStatus() : { state: 'disabled' });
+      return;
+    }
+
     if (pathname === '/api/toss/prices' && request.method === 'GET') {
       const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
       const symbols = (url.searchParams.get('symbols') || '').split(',').filter((symbol) => /^[A-Za-z0-9.-]{1,12}$/.test(symbol)).slice(0, 200);
@@ -103,7 +150,7 @@ function createServer(options = {}) {
         sendJson(response, 400, { error: 'symbols가 필요합니다.' });
         return;
       }
-      fetchTossPrices(symbols).then((data) => sendJson(response, 200, data)).catch((error) => sendJson(response, 502, { error: error.message }));
+      fetchTossPrices(symbols).then((data) => sendJson(response, 200, data)).catch((error) => sendJson(response, 502, { error: error.message, upstreamStatus: error.status || null }));
       return;
     }
 
@@ -128,6 +175,9 @@ function createServer(options = {}) {
       response.end(content);
     });
   });
+  recorder?.start();
+  server.on('close', () => recorder?.stop());
+  return server;
 }
 
 if (require.main === module) {
@@ -138,4 +188,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, safeFilePath, fetchTossPrices, getTossAccessToken };
+module.exports = { createServer, safeFilePath, fetchTossPrices, getTossAccessToken, requestTossPrices };

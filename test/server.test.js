@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { createServer, safeFilePath } = require('../server');
+const { createServer, safeFilePath, requestTossPrices } = require('../server');
 const { HistoryStore } = require('../lib/history-store');
 
 test('serves the dashboard and static assets', async (t) => {
-  const server = createServer().listen(0, '127.0.0.1');
+  const server = createServer({ recorder: false }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => server.close());
   const { port } = server.address();
@@ -25,7 +25,7 @@ test('serves the dashboard and static assets', async (t) => {
 test('stores one snapshot per date and exposes history', async (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'market-flow-'));
   const store = new HistoryStore(path.join(directory, 'history.json'));
-  const server = createServer({ historyStore: store }).listen(0, '127.0.0.1');
+  const server = createServer({ historyStore: store, recorder: false }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => { server.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -42,4 +42,15 @@ test('stores one snapshot per date and exposes history', async (t) => {
 test('rejects paths outside the public directory', () => {
   assert.equal(safeFilePath('/../server.js'), null);
   assert.equal(safeFilePath('/styles.css'), path.join(__dirname, '..', 'public', 'styles.css'));
+});
+
+test('preserves the Toss API error reason for connection diagnostics', async () => {
+  const fakeFetch = async () => new Response(JSON.stringify({ error: { message: '허용되지 않은 IP입니다.' } }), {
+    status: 403, headers: { 'content-type': 'application/json' },
+  });
+
+  await assert.rejects(
+    requestTossPrices(['005930'], 'test-token', fakeFetch),
+    (error) => error.status === 403 && error.message === '허용되지 않은 IP입니다.',
+  );
 });

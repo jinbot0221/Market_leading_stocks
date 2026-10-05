@@ -1,3 +1,4 @@
 # Runtime market snapshots and secrets
 data/history.json
+data/intraday.json
 .env
