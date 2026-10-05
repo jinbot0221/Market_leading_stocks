@@ -4,6 +4,32 @@ const sectors = [
   { name: '방산', change: 2.64, strength: 78 },
   { name: '바이오', change: 2.31, strength: 71 },
   { name: '로봇 · AI', change: 1.98, strength: 66 },
+  { name: '자동차', change: 1.84, strength: 64 },
+  { name: '조선', change: 1.72, strength: 62 },
+  { name: '은행', change: 1.46, strength: 59 },
+  { name: '증권', change: 1.32, strength: 57 },
+  { name: '보험', change: 1.18, strength: 55 },
+  { name: '2차전지', change: 1.04, strength: 53 },
+  { name: '화학', change: 0.91, strength: 51 },
+  { name: '철강 · 금속', change: 0.76, strength: 49 },
+  { name: '기계 · 장비', change: 0.63, strength: 47 },
+  { name: '건설', change: 0.51, strength: 45 },
+  { name: '통신', change: 0.44, strength: 43 },
+  { name: '인터넷', change: 0.38, strength: 41 },
+  { name: '게임', change: 0.24, strength: 39 },
+  { name: '엔터 · 미디어', change: 0.12, strength: 37 },
+  { name: '유통', change: 0.06, strength: 35 },
+  { name: '화장품', change: -0.08, strength: 33 },
+  { name: '음식료', change: -0.17, strength: 31 },
+  { name: '운송', change: -0.26, strength: 29 },
+  { name: '항공', change: -0.34, strength: 27 },
+  { name: '여행 · 레저', change: -0.43, strength: 25 },
+  { name: '의류 · 소비재', change: -0.52, strength: 23 },
+  { name: '교육', change: -0.64, strength: 21 },
+  { name: '부동산 · 리츠', change: -0.71, strength: 19 },
+  { name: '농업 · 비료', change: -0.83, strength: 17 },
+  { name: '종이 · 목재', change: -0.96, strength: 15 },
+
 ];
 
 const stocks = [
@@ -16,6 +42,24 @@ const stocks = [
 
 const formatPrice = (value) => new Intl.NumberFormat('ko-KR').format(value);
 
+
+function renderSectors(filter = 'ALL') {
+  const visible = filter === 'STRONG' ? sectors.filter((sector) => sector.strength >= 60)
+    : filter === 'UP' ? sectors.filter((sector) => sector.change > 0) : sectors;
+  document.querySelector('#sectorGrid').innerHTML = visible.map((sector) => {
+    const index = sectors.indexOf(sector);
+    const changeClass = sector.change >= 0 ? 'up' : 'down';
+    const changeSign = sector.change >= 0 ? '+' : '';
+    return `
+    <article class="sector-card">
+      <span class="sector-rank">${String(index + 1).padStart(2, '0')}</span>
+      <h3>${sector.name}</h3>
+      <span class="change ${changeClass}">${changeSign}${sector.change.toFixed(2)}%</span>
+      <div class="strength"><div class="strength-label"><span>주도 강도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
+    </article>`;
+  }).join('');
+  document.querySelector('#visibleSectorCount').textContent = `${visible.length}개`;
+
 function renderSectors() {
   document.querySelector('#sectorGrid').innerHTML = sectors.map((sector, index) => `
     <article class="sector-card">
@@ -24,6 +68,7 @@ function renderSectors() {
       <span class="change">+${sector.change.toFixed(2)}%</span>
       <div class="strength"><div class="strength-label"><span>주도 강도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
     </article>`).join('');
+
 }
 
 function renderStocks(market = 'ALL') {
@@ -101,6 +146,13 @@ document.querySelectorAll('.tabs button').forEach((button) => button.addEventLis
   document.querySelector('.tabs button.active').classList.remove('active');
   button.classList.add('active');
   renderStocks(button.dataset.market);
+}));
+
+
+document.querySelectorAll('.sector-filter button').forEach((button) => button.addEventListener('click', () => {
+  document.querySelector('.sector-filter button.active').classList.remove('active');
+  button.classList.add('active');
+  renderSectors(button.dataset.sectorFilter);
 }));
 
 document.querySelector('#refreshButton').addEventListener('click', (event) => {

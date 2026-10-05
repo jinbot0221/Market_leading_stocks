@@ -1,6 +1,8 @@
 # Market Flow
 
 국내 주식 시장에서 거래대금과 상승 강도가 집중되는 **주도 섹터와 주도주**를 모바일에서도 빠르게 확인할 수 있는 로컬 웹 대시보드입니다.
+반도체, 에너지, 방산, 바이오부터 금융, 소비재, 운송, 리츠까지 국내 시장의 주요 30개 섹터를 모두 표시합니다. **전체 · 강세 · 상승** 필터로 원하는 범위를 빠르게 확인할 수 있으며 모바일에서도 일부 섹터를 숨기지 않습니다.
+
 
 ## 실행 방법
 
@@ -17,7 +19,43 @@ PC의 내부 IP는 Windows에서 `ipconfig`, macOS/Linux에서 `ifconfig` 또는
 
 ## 데이터 연결 안내
 
+
+### `TOSS_CLIENT_ID`는 어디서 받나요?
+
+`TOSS_CLIENT_ID`는 프로젝트 안에 원래 들어 있는 값이 아니라 **토스증권에서 본인이 직접 발급받는 API 인증값**입니다.
+
+1. PC 브라우저에서 [토스증권 WTS](https://www.tossinvest.com/)에 로그인합니다.
+2. **설정 → Open API**로 이동합니다.
+3. 클라이언트를 등록하고 `Client ID`와 `Client Secret`을 발급받습니다.
+4. 같은 화면 아래의 **허용 IP 관리**에 이 서버가 사용하는 공인 IP를 등록합니다.
+
+### 이 프로젝트의 어디에 입력하나요?
+
+프로젝트 최상위 폴더(`/workspace/Market_leading_stocks`)에서 예제 파일을 `.env`로 복사합니다.
+
+```bash
+cp .env.example .env
+```
+
+그다음 `.env`를 메모장이나 VS Code로 열어 발급받은 실제 값을 입력합니다.
+
+```dotenv
+TOSS_CLIENT_ID=토스증권에서_발급받은_Client_ID
+TOSS_CLIENT_SECRET=토스증권에서_발급받은_Client_Secret
+```
+
+저장한 다음 서버를 실행하면 `.env`가 자동으로 로드됩니다.
+
+```bash
+npm start
+```
+
+`.env`는 Git에서 제외되어 있으며, Client Secret은 다른 사람에게 전달하거나 GitHub에 올리면 안 됩니다.
+
+환경 변수를 직접 지정하는 기존 방식도 사용할 수 있습니다.
+
 토스증권 WTS의 **설정 → Open API**에서 발급한 Client ID와 Client Secret을 환경 변수로 지정하면 서버가 OAuth 2.0 액세스 토큰을 발급·캐시하고 주요 종목의 현재가를 5초마다 갱신합니다. 먼저 Open API 설정에서 이 서버가 사용하는 공인 IP도 허용해야 합니다. 인증값을 지정하지 않으면 화면 우측 상단에 `DEMO`가 표시되고 샘플 데이터로 동작합니다.
+
 
 ```bash
 TOSS_CLIENT_ID="발급받은_Client_ID" \
@@ -25,7 +63,9 @@ TOSS_CLIENT_SECRET="발급받은_Client_Secret" \
 npm start
 ```
 
-이미 발급한 토큰을 직접 지정하려면 `TOSS_ACCESS_TOKEN="토큰" npm start`도 사용할 수 있습니다. 인증정보와 토큰은 브라우저로 전달되지 않고 로컬 서버에서만 사용됩니다. 현재가는 토스증권의 `GET /api/v1/prices`를 사용합니다.
+
+서버가 OAuth 2.0 액세스 토큰을 발급·캐시하고 주요 종목의 현재가를 5초마다 갱신합니다. 이미 발급한 토큰을 직접 지정하려면 `TOSS_ACCESS_TOKEN="토큰" npm start`도 사용할 수 있습니다. 인증정보와 토큰은 브라우저로 전달되지 않고 로컬 서버에서만 사용됩니다. 인증값이 없으면 화면 우측 상단에 `DEMO`가 표시됩니다.
+
 
 ## 날짜별 기록
 

@@ -2,6 +2,9 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { HistoryStore } = require('./lib/history-store');
+const { loadEnv } = require('./lib/load-env');
+
+loadEnv(path.join(__dirname, '.env'));
 
 const PORT = Number(process.env.PORT) || 4173;
 const HOST = process.env.HOST || '0.0.0.0';
