@@ -29,7 +29,6 @@ const sectors = [
   { name: '부동산 · 리츠', change: -0.71, strength: 19 },
   { name: '농업 · 비료', change: -0.83, strength: 17 },
   { name: '종이 · 목재', change: -0.96, strength: 15 },
-
 ];
 
 const stocks = [
@@ -42,7 +41,6 @@ const stocks = [
 
 const formatPrice = (value) => new Intl.NumberFormat('ko-KR').format(value);
 
-
 function renderSectors(filter = 'ALL') {
   const visible = filter === 'STRONG' ? sectors.filter((sector) => sector.strength >= 60)
     : filter === 'UP' ? sectors.filter((sector) => sector.change > 0) : sectors;
@@ -50,25 +48,18 @@ function renderSectors(filter = 'ALL') {
     const index = sectors.indexOf(sector);
     const changeClass = sector.change >= 0 ? 'up' : 'down';
     const changeSign = sector.change >= 0 ? '+' : '';
+    const sizeClass = sector.strength >= 85 ? 'flow-mega'
+      : sector.strength >= 70 ? 'flow-large'
+        : sector.strength >= 50 ? 'flow-medium' : 'flow-normal';
     return `
-    <article class="sector-card">
+    <article class="sector-card ${sizeClass}" style="--flow:${sector.strength};--flow-opacity:${(sector.strength / 500).toFixed(3)}" aria-label="${sector.name}, 수급 집중도 ${sector.strength}">
       <span class="sector-rank">${String(index + 1).padStart(2, '0')}</span>
-      <h3>${sector.name}</h3>
+      <div class="sector-title"><h3>${sector.name}</h3><span class="flow-badge">수급 ${sector.strength}</span></div>
       <span class="change ${changeClass}">${changeSign}${sector.change.toFixed(2)}%</span>
-      <div class="strength"><div class="strength-label"><span>주도 강도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
+      <div class="strength"><div class="strength-label"><span>수급 집중도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
     </article>`;
   }).join('');
   document.querySelector('#visibleSectorCount').textContent = `${visible.length}개`;
-
-function renderSectors() {
-  document.querySelector('#sectorGrid').innerHTML = sectors.map((sector, index) => `
-    <article class="sector-card">
-      <span class="sector-rank">0${index + 1}</span>
-      <h3>${sector.name}</h3>
-      <span class="change">+${sector.change.toFixed(2)}%</span>
-      <div class="strength"><div class="strength-label"><span>주도 강도</span><b>${sector.strength}</b></div><div class="strength-bar"><i style="--strength:${sector.strength}%"></i></div></div>
-    </article>`).join('');
-
 }
 
 function renderStocks(market = 'ALL') {
@@ -99,7 +90,11 @@ async function connectToss() {
   try {
     const response = await fetch(`/api/toss/prices?symbols=${symbols}`);
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
+    if (!response.ok) {
+      const error = new Error(data.error);
+      error.retryAfter = data.retryAfter;
+      throw error;
+    }
     const label = document.querySelector('#connectionLabel');
     const badge = document.querySelector('#connectionMode');
     if (data.mode === 'live') {
@@ -109,15 +104,57 @@ async function connectToss() {
       });
       label.textContent = '토스증권 실시간';
       badge.textContent = 'LIVE';
+      document.querySelector('#connectionStatus').title = '토스증권 Open API에 정상 연결되었습니다.';
+      document.querySelector('#connectionHelp').hidden = true;
       renderStocks(document.querySelector('.tabs button.active').dataset.market);
+      document.querySelector('#refreshStatus').textContent = `${new Date().toLocaleTimeString('ko-KR')} 갱신 완료`;
     } else {
       label.textContent = '샘플 데이터';
       badge.textContent = 'DEMO';
+      document.querySelector('#connectionStatus').title = 'TOSS_CLIENT_ID와 TOSS_CLIENT_SECRET을 .env에 입력해 주세요.';
+      document.querySelector('#refreshStatus').textContent = 'API 인증정보 필요';
+      const help = document.querySelector('#connectionHelp');
+      help.textContent = '.env에 토스증권 Client ID와 Client Secret을 입력한 뒤 서버를 다시 시작해 주세요.';
+      help.hidden = false;
     }
-  } catch {
-    document.querySelector('#connectionLabel').textContent = '연결 확인 필요';
+  } catch (error) {
+    const reason = error.message || '알 수 없는 오류';
+    document.querySelector('#connectionLabel').textContent = '토스 연결 오류';
     document.querySelector('#connectionMode').textContent = 'OFF';
+    document.querySelector('#connectionStatus').title = reason;
+    document.querySelector('#refreshStatus').textContent = `${reason} · ${error.retryAfter || 1}초 후 재시도`;
+    const help = document.querySelector('#connectionHelp');
+    const title = document.createElement('strong');
+    const description = document.createElement('span');
+    title.textContent = '토스증권 인증 실패';
+    description.textContent = `${reason}. .env의 발급값과 WTS 허용 IP를 확인한 뒤 서버를 다시 시작해 주세요.`;
+    help.replaceChildren(title, description);
+    help.hidden = false;
   }
+}
+
+async function updateRecorderStatus() {
+  try {
+    const [statusResponse, dataResponse] = await Promise.all([fetch('/api/recorder/status'), fetch('/api/intraday')]);
+    const status = await statusResponse.json();
+    const day = await dataResponse.json();
+    const labels = {
+      recording: '기록 중', 'outside-hours': '기록 시간 대기',
+      'credentials-required': 'API 인증 필요', error: '기록 오류', waiting: '시작 대기',
+    };
+    document.querySelector('#recorderState').textContent = labels[status.state] || status.state;
+    document.querySelector('#snapshotCount').textContent = `오늘 ${day.snapshots.length}개 저장`;
+  } catch {
+    document.querySelector('#recorderState').textContent = '상태 확인 실패';
+  }
+}
+
+function startAutoRefresh() {
+  const refresh = async () => {
+    await Promise.all([connectToss(), updateRecorderStatus()]);
+    window.setTimeout(refresh, 1000);
+  };
+  refresh();
 }
 
 function renderHistory(history) {
@@ -148,17 +185,19 @@ document.querySelectorAll('.tabs button').forEach((button) => button.addEventLis
   renderStocks(button.dataset.market);
 }));
 
-
 document.querySelectorAll('.sector-filter button').forEach((button) => button.addEventListener('click', () => {
   document.querySelector('.sector-filter button.active').classList.remove('active');
   button.classList.add('active');
   renderSectors(button.dataset.sectorFilter);
 }));
 
-document.querySelector('#refreshButton').addEventListener('click', (event) => {
+document.querySelector('#refreshButton').addEventListener('click', async (event) => {
   event.currentTarget.classList.add('loading');
   updateClock();
   const toast = document.querySelector('#toast');
+  await Promise.all([connectToss(), updateRecorderStatus()]);
+  toast.textContent = document.querySelector('#connectionMode').textContent === 'LIVE'
+    ? '최신 데이터를 불러왔습니다.' : '연결 상태를 확인해 주세요.';
   toast.classList.add('show');
   setTimeout(() => { event.currentTarget.classList.remove('loading'); toast.classList.remove('show'); }, 900);
 });
@@ -167,7 +206,6 @@ renderSectors();
 renderStocks();
 renderSparklines();
 updateClock();
-connectToss();
 saveAndLoadHistory();
+startAutoRefresh();
 setInterval(updateClock, 3000);
-setInterval(connectToss, 5000);
