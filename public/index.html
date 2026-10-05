@@ -53,6 +53,11 @@
 
       <section class="sector-grid" id="sectorGrid" aria-live="polite"></section>
 
+      <section class="sector-detail" id="sectorDetail" hidden aria-live="polite">
+        <div class="detail-head"><div><span>SECTOR DETAIL · 30초 자동 갱신</span><h3 id="detailTitle">반도체 거래대금 상위 10종목</h3><p>오늘 일봉 거래량 × 현재가로 계산한 섹터 내 거래대금 순위</p></div><button id="closeDetail" aria-label="상세 닫기">×</button></div>
+        <div class="detail-stocks" id="detailStocks"></div>
+      </section>
+
       <section class="history-panel">
         <div class="section-heading compact">
           <div><span class="section-number">HISTORY</span><div><h2>주도 섹터 흐름</h2><p>매일 저장된 1위 섹터의 강도 변화</p></div></div>
@@ -92,6 +97,7 @@
 
     <nav class="mobile-nav" aria-label="모바일 메뉴"><a class="active" href="#"><span>⌁</span>홈</a><a href="#sectorGrid"><span>◫</span>섹터</a><a href="#stockTable"><span>↗</span>주도주</a><a href="#"><span>○</span>설정</a></nav>
     <div class="toast" id="toast">최신 데이터를 불러왔습니다.</div>
+    <script src="/sector-data.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

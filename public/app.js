@@ -40,6 +40,7 @@ const stocks = [
 ];
 
 const formatPrice = (value) => new Intl.NumberFormat('ko-KR').format(value);
+let sectorDetailTimer;
 
 function renderSectors(filter = 'ALL') {
   const visible = filter === 'STRONG' ? sectors.filter((sector) => sector.strength >= 60)
@@ -52,7 +53,7 @@ function renderSectors(filter = 'ALL') {
       : sector.strength >= 70 ? 'flow-large'
         : sector.strength >= 50 ? 'flow-medium' : 'flow-normal';
     return `
-    <article class="sector-card ${sizeClass}" style="--flow:${sector.strength};--flow-opacity:${(sector.strength / 500).toFixed(3)}" aria-label="${sector.name}, 수급 집중도 ${sector.strength}">
+    <article class="sector-card ${sizeClass}" tabindex="0" data-sector="${sector.name}" style="--flow:${sector.strength};--flow-opacity:${(sector.strength / 500).toFixed(3)}" aria-label="${sector.name}, 수급 집중도 ${sector.strength}, 상세 종목 보기">
       <span class="sector-rank">${String(index + 1).padStart(2, '0')}</span>
       <div class="sector-title"><h3>${sector.name}</h3><span class="flow-badge">수급 ${sector.strength}</span></div>
       <span class="change ${changeClass}">${changeSign}${sector.change.toFixed(2)}%</span>
@@ -60,7 +61,47 @@ function renderSectors(filter = 'ALL') {
     </article>`;
   }).join('');
   document.querySelector('#visibleSectorCount').textContent = `${visible.length}개`;
+  document.querySelectorAll('.sector-card').forEach((card) => {
+    card.addEventListener('click', () => showSectorDetail(card.dataset.sector));
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showSectorDetail(card.dataset.sector); }
+    });
+  });
 }
+
+async function showSectorDetail(sectorName, shouldScroll = true) {
+  clearTimeout(sectorDetailTimer);
+  const detail = document.querySelector('#sectorDetail');
+  const container = document.querySelector('#detailStocks');
+  const components = window.SECTOR_STOCKS?.[sectorName] || [];
+  document.querySelector('#detailTitle').textContent = `${sectorName} 거래대금 상위 10종목`;
+  detail.hidden = false;
+  container.innerHTML = '<p class="detail-loading">종목 데이터를 불러오는 중입니다.</p>';
+  if (shouldScroll) detail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  let flows = [];
+  try {
+    const response = await fetch(`/api/toss/sector-flow?symbols=${components.map(([code]) => code).join(',')}`);
+    const data = await response.json();
+    if (response.ok && data.mode === 'live') flows = data.result;
+  } catch { /* DEMO 가격으로 계속 표시합니다. */ }
+
+  const ordered = flows.length ? [...components].sort((a, b) => flows.findIndex((flow) => flow.symbol === a[0]) - flows.findIndex((flow) => flow.symbol === b[0])) : components;
+  container.innerHTML = ordered.map(([code, name], index) => {
+    const flow = flows.find((item) => item.symbol === code);
+    const price = flow?.lastPrice ? `${formatPrice(Number(flow.lastPrice))}원` : '연결 후 표시';
+    const traded = flow ? `${formatPrice(Math.round(flow.tradingValue / 100000000))}억원` : '거래대금 대기';
+    return `<article><b>${index + 1}</b><div><strong>${name}</strong><small>${code}</small></div><span>${price}</span><em>${traded}</em></article>`;
+  }).join('');
+  sectorDetailTimer = window.setTimeout(() => {
+    if (!detail.hidden) showSectorDetail(sectorName, false);
+  }, 30000);
+}
+
+document.querySelector('#closeDetail').addEventListener('click', () => {
+  clearTimeout(sectorDetailTimer);
+  document.querySelector('#sectorDetail').hidden = true;
+});
 
 function renderStocks(market = 'ALL') {
   const filtered = market === 'ALL' ? stocks : stocks.filter((stock) => stock.market === market);

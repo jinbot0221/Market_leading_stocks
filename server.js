@@ -79,6 +79,34 @@ async function fetchTossPrices(symbols, providedToken = process.env.TOSS_ACCESS_
   }
 }
 
+async function fetchTossSectorFlow(symbols) {
+  const token = process.env.TOSS_ACCESS_TOKEN || await getTossAccessToken();
+  if (!token) return { mode: 'sample', result: [] };
+  const headers = { Authorization: `Bearer ${token}` };
+  const priceRequest = requestTossPrices(symbols, token).catch(async () => {
+    const validQuotes = await Promise.all(symbols.map((symbol) => requestTossPrices([symbol], token)
+      .then((data) => data.result[0]).catch(() => null)));
+    return { mode: 'live', result: validQuotes.filter(Boolean) };
+  });
+  const [prices, ...dailyCandles] = await Promise.all([
+    priceRequest,
+    ...symbols.map(async (symbol) => {
+      const response = await fetch(`https://openapi.tossinvest.com/api/v1/candles?symbol=${encodeURIComponent(symbol)}&interval=1d&count=1`, { headers });
+      if (!response.ok) return { symbol, tradingValue: 0 };
+      const data = await response.json();
+      const candle = data.result?.candles?.[0];
+      return { symbol, tradingValue: candle ? Number(candle.closePrice) * Number(candle.volume) : 0 };
+    }),
+  ]);
+  return {
+    mode: 'live',
+    result: dailyCandles.map((flow) => ({
+      ...flow,
+      lastPrice: prices.result.find((quote) => quote.symbol === flow.symbol)?.lastPrice || null,
+    })).sort((a, b) => b.tradingValue - a.tradingValue),
+  };
+}
+
 let tokenCache = { value: null, expiresAt: 0 };
 let authFailure = { message: null, retryAt: 0, status: null };
 async function getTossAccessToken(fetchImpl = fetch) {
@@ -178,6 +206,17 @@ function createServer(options = {}) {
       return;
     }
 
+    if (pathname === '/api/toss/sector-flow' && request.method === 'GET') {
+      const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+      const symbols = (url.searchParams.get('symbols') || '').split(',').filter((symbol) => /^[A-Za-z0-9.-]{1,12}$/.test(symbol)).slice(0, 10);
+      if (!symbols.length) {
+        sendJson(response, 400, { error: 'symbols가 필요합니다.' });
+        return;
+      }
+      fetchTossSectorFlow(symbols).then((data) => sendJson(response, 200, data)).catch((error) => sendJson(response, 502, { error: error.message }));
+      return;
+    }
+
     const filePath = safeFilePath(pathname);
 
     if (!filePath) {
@@ -217,4 +256,4 @@ function resetTossAuthForTests() {
   authFailure = { message: null, retryAt: 0, status: null };
 }
 
-module.exports = { createServer, safeFilePath, fetchTossPrices, getTossAccessToken, requestTossPrices, resetTossAuthForTests };
+module.exports = { createServer, safeFilePath, fetchTossPrices, fetchTossSectorFlow, getTossAccessToken, requestTossPrices, resetTossAuthForTests };
