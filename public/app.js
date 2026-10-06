@@ -30,6 +30,7 @@ const sectors = [
   { name: '농업 · 비료', change: -0.83, strength: 17 },
   { name: '종이 · 목재', change: -0.96, strength: 15 },
 ];
+const REFRESH_INTERVAL_MS = 5000;
 
 const stocks = [
   { name: 'SK하이닉스', code: '000660', market: 'KOSPI', price: 183400, change: 6.38, volume: '8,421억', strength: 98, icon: 'SK' },
@@ -187,7 +188,7 @@ async function connectToss() {
     document.querySelector('#connectionLabel').textContent = '토스 연결 오류';
     document.querySelector('#connectionMode').textContent = 'OFF';
     document.querySelector('#connectionStatus').title = reason;
-    document.querySelector('#refreshStatus').textContent = `${reason} · ${error.retryAfter || 3}초 후 재시도`;
+    document.querySelector('#refreshStatus').textContent = `${reason} · ${error.retryAfter || REFRESH_INTERVAL_MS / 1000}초 후 재시도`;
     const help = document.querySelector('#connectionHelp');
     const title = document.createElement('strong');
     const description = document.createElement('span');
@@ -238,7 +239,7 @@ async function updateMarketSummary() {
 function startAutoRefresh() {
   const refresh = async () => {
     await Promise.all([connectToss(), updateRecorderStatus(), updateMarketSummary(), updateLeaders()]);
-    window.setTimeout(refresh, 3000);
+    window.setTimeout(refresh, REFRESH_INTERVAL_MS);
   };
   refresh();
 }
