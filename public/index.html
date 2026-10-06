@@ -35,13 +35,13 @@
         <div class="hero-meta">
           <span>마지막 업데이트</span>
           <strong id="updatedAt">10:42:18</strong>
-          <small id="refreshStatus">1초마다 자동 갱신</small>
+          <small id="refreshStatus">3초마다 자동 갱신</small>
         </div>
       </section>
 
       <section class="market-strip" aria-label="시장 지수">
-        <article><div><span>KOSPI</span><b>2,698.42</b></div><strong class="up">+0.82%</strong><div class="sparkline green" data-series="18,22,20,27,29,26,34,37,36,43,47,51"></div></article>
-        <article><div><span>KOSDAQ</span><b>869.21</b></div><strong class="up">+1.24%</strong><div class="sparkline green" data-series="14,16,15,20,22,19,25,28,27,32,38,42"></div></article>
+        <article><div><span>KOSPI</span><b id="kospiPrice">연결 중</b></div><strong id="kospiChange">—</strong><div id="kospiChart" class="sparkline green" data-series="18,22,20,27,29,26,34,37,36,43,47,51"></div></article>
+        <article><div><span>KOSDAQ</span><b id="kosdaqPrice">연결 중</b></div><strong id="kosdaqChange">—</strong><div id="kosdaqChart" class="sparkline green" data-series="14,16,15,20,22,19,25,28,27,32,38,42"></div></article>
         <article><div><span>USD/KRW</span><b>1,364.80</b></div><strong class="down">−0.18%</strong><div class="sparkline red" data-series="38,37,40,35,34,36,31,33,29,27,28,24"></div></article>
         <article class="breadth"><span>상승 종목</span><div><i style="--width: 67%"></i></div><b><em>612</em> / 912</b></article>
       </section>
@@ -52,6 +52,11 @@
       </section>
 
       <section class="sector-grid" id="sectorGrid" aria-live="polite"></section>
+
+      <section class="sector-detail" id="sectorDetail" hidden aria-live="polite">
+        <div class="detail-head"><div><span>SECTOR DETAIL · 30초 자동 갱신</span><h3 id="detailTitle">반도체 거래대금 상위 10종목</h3><p>오늘 일봉 거래량 × 현재가로 계산한 섹터 내 거래대금 순위</p></div><button id="closeDetail" aria-label="상세 닫기">×</button></div>
+        <div class="detail-stocks" id="detailStocks"></div>
+      </section>
 
       <section class="history-panel">
         <div class="section-heading compact">
@@ -69,7 +74,7 @@
       <section class="content-grid">
         <div class="leaders-panel">
           <div class="section-heading compact">
-            <div><span class="section-number">02</span><div><h2>실시간 주도주</h2><p>거래대금이 집중되는 종목</p></div></div>
+            <div><span class="section-number">02</span><div><h2>실시간 주도주 TOP 10</h2><p>국내 시장 실시간 거래대금 상위 종목</p></div></div>
             <div class="tabs" role="tablist"><button class="active" data-market="ALL">전체</button><button data-market="KOSPI">코스피</button><button data-market="KOSDAQ">코스닥</button></div>
           </div>
           <div class="table-wrap">
@@ -92,6 +97,7 @@
 
     <nav class="mobile-nav" aria-label="모바일 메뉴"><a class="active" href="#"><span>⌁</span>홈</a><a href="#sectorGrid"><span>◫</span>섹터</a><a href="#stockTable"><span>↗</span>주도주</a><a href="#"><span>○</span>설정</a></nav>
     <div class="toast" id="toast">최신 데이터를 불러왔습니다.</div>
+    <script src="/sector-data.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

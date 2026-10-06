@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { createServer, safeFilePath, requestTossPrices, getTossAccessToken, resetTossAuthForTests } = require('../server');
+const { createServer, safeFilePath, requestTossPrices, calculateMarketIndicator, normalizeLeaderRankings, getTossAccessToken, resetTossAuthForTests } = require('../server');
 const { HistoryStore } = require('../lib/history-store');
 
 test('serves the dashboard and static assets', async (t) => {
@@ -73,4 +73,24 @@ test('turns a Toss OAuth 401 into an actionable credential error', async (t) => 
     (error) => error.status === 401 && error.retryAfter === 30
       && error.message === 'Client ID 또는 Client Secret이 올바르지 않습니다',
   );
+});
+
+test('calculates index change from the previous close and keeps minute chart order', () => {
+  const market = calculateMarketIndicator('KOSPI', '2750', [
+    { closePrice: '2750' }, { closePrice: '2500' },
+  ], [{ closePrice: '2750' }, { closePrice: '2700' }]);
+
+  assert.equal(market.changeRate, 10);
+  assert.deepEqual(market.series, [2700, 2750]);
+});
+
+test('normalizes Toss trading amount rankings for the leaders table', () => {
+  const result = normalizeLeaderRankings({ result: { rankings: [{
+    symbol: '005930', price: { lastPrice: '72000', changeRate: '0.0125' }, tradingAmount: '1040000000000',
+  }] } }, { result: [{ symbol: '005930', name: '삼성전자', market: 'KOSPI' }] });
+
+  assert.deepEqual(result[0], {
+    code: '005930', name: '삼성전자', market: 'KOSPI', price: 72000,
+    change: 1.25, tradingAmount: 1040000000000,
+  });
 });

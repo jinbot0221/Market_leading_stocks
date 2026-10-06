@@ -79,6 +79,110 @@ async function fetchTossPrices(symbols, providedToken = process.env.TOSS_ACCESS_
   }
 }
 
+async function fetchTossSectorFlow(symbols) {
+  const token = process.env.TOSS_ACCESS_TOKEN || await getTossAccessToken();
+  if (!token) return { mode: 'sample', result: [] };
+  const headers = { Authorization: `Bearer ${token}` };
+  const priceRequest = requestTossPrices(symbols, token).catch(async () => {
+    const validQuotes = await Promise.all(symbols.map((symbol) => requestTossPrices([symbol], token)
+      .then((data) => data.result[0]).catch(() => null)));
+    return { mode: 'live', result: validQuotes.filter(Boolean) };
+  });
+  const [prices, ...dailyCandles] = await Promise.all([
+    priceRequest,
+    ...symbols.map(async (symbol) => {
+      const response = await fetch(`https://openapi.tossinvest.com/api/v1/candles?symbol=${encodeURIComponent(symbol)}&interval=1d&count=1`, { headers });
+      if (!response.ok) return { symbol, tradingValue: 0 };
+      const data = await response.json();
+      const candle = data.result?.candles?.[0];
+      return { symbol, tradingValue: candle ? Number(candle.closePrice) * Number(candle.volume) : 0 };
+    }),
+  ]);
+  return {
+    mode: 'live',
+    result: dailyCandles.map((flow) => ({
+      ...flow,
+      lastPrice: prices.result.find((quote) => quote.symbol === flow.symbol)?.lastPrice || null,
+    })).sort((a, b) => b.tradingValue - a.tradingValue),
+  };
+}
+
+function calculateMarketIndicator(symbol, price, dailyCandles, minuteCandles) {
+  const previousClose = Number(dailyCandles?.[1]?.closePrice || dailyCandles?.[0]?.openPrice || price);
+  const lastPrice = Number(price);
+  const changeRate = previousClose ? ((lastPrice - previousClose) / previousClose) * 100 : 0;
+  return {
+    symbol,
+    lastPrice,
+    changeRate,
+    series: (minuteCandles || []).slice().reverse().map((candle) => Number(candle.closePrice)),
+  };
+}
+
+async function fetchTossMarketSummary() {
+  const token = process.env.TOSS_ACCESS_TOKEN || await getTossAccessToken();
+  if (!token) return { mode: 'sample', result: [] };
+  const headers = { Authorization: `Bearer ${token}` };
+  const getJson = async (url) => {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      const error = new Error(`토스증권 시장지표 조회 오류 (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.json();
+  };
+  const base = 'https://openapi.tossinvest.com/api/v1/market-indicators';
+  const [prices, ...candles] = await Promise.all([
+    getJson(`${base}/prices?symbols=KOSPI%2CKOSDAQ`),
+    ...['KOSPI', 'KOSDAQ'].flatMap((symbol) => [
+      getJson(`${base}/${symbol}/candles?interval=1d&count=2`),
+      getJson(`${base}/${symbol}/candles?interval=1m&count=30`),
+    ]),
+  ]);
+  const candleList = (payload) => payload.result?.candles || payload.result?.[0]?.candles || [];
+  return {
+    mode: 'live',
+    result: prices.result.map((price, index) => calculateMarketIndicator(
+      price.symbol, price.lastPrice, candleList(candles[index * 2]), candleList(candles[index * 2 + 1]),
+    )),
+  };
+}
+
+function normalizeLeaderRankings(rankingPayload, stockPayload) {
+  const stocks = stockPayload.result || [];
+  return (rankingPayload.result?.rankings || []).map((item) => {
+    const stock = stocks.find((candidate) => candidate.symbol === item.symbol) || {};
+    return {
+      code: item.symbol,
+      name: stock.name || item.symbol,
+      market: stock.market || 'KR',
+      price: Number(item.price.lastPrice),
+      change: Number(item.price.changeRate || 0) * 100,
+      tradingAmount: Number(item.tradingAmount || 0),
+    };
+  });
+}
+
+async function fetchTossLeaders() {
+  const token = process.env.TOSS_ACCESS_TOKEN || await getTossAccessToken();
+  if (!token) return { mode: 'sample', rankedAt: null, result: [] };
+  const headers = { Authorization: `Bearer ${token}` };
+  const rankingUrl = new URL('https://openapi.tossinvest.com/api/v1/rankings');
+  rankingUrl.search = new URLSearchParams({
+    type: 'MARKET_TRADING_AMOUNT', marketCountry: 'KR', duration: 'realtime',
+    excludeInvestmentCaution: 'true', count: '100',
+  });
+  const rankingResponse = await fetch(rankingUrl, { headers });
+  if (!rankingResponse.ok) throw new Error(`토스증권 랭킹 조회 오류 (${rankingResponse.status})`);
+  const rankingPayload = await rankingResponse.json();
+  const symbols = (rankingPayload.result?.rankings || []).map((item) => item.symbol);
+  if (!symbols.length) return { mode: 'live', rankedAt: rankingPayload.result?.rankedAt, result: [] };
+  const stockResponse = await fetch(`https://openapi.tossinvest.com/api/v1/stocks?symbols=${encodeURIComponent(symbols.join(','))}`, { headers });
+  const stockPayload = stockResponse.ok ? await stockResponse.json() : { result: [] };
+  return { mode: 'live', rankedAt: rankingPayload.result?.rankedAt, result: normalizeLeaderRankings(rankingPayload, stockPayload) };
+}
+
 let tokenCache = { value: null, expiresAt: 0 };
 let authFailure = { message: null, retryAt: 0, status: null };
 async function getTossAccessToken(fetchImpl = fetch) {
@@ -178,6 +282,29 @@ function createServer(options = {}) {
       return;
     }
 
+    if (pathname === '/api/toss/sector-flow' && request.method === 'GET') {
+      const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+      const symbols = (url.searchParams.get('symbols') || '').split(',').filter((symbol) => /^[A-Za-z0-9.-]{1,12}$/.test(symbol)).slice(0, 10);
+      if (!symbols.length) {
+        sendJson(response, 400, { error: 'symbols가 필요합니다.' });
+        return;
+      }
+      fetchTossSectorFlow(symbols).then((data) => sendJson(response, 200, data)).catch((error) => sendJson(response, 502, { error: error.message }));
+      return;
+    }
+
+    if (pathname === '/api/toss/market-summary' && request.method === 'GET') {
+      fetchTossMarketSummary().then((data) => sendJson(response, 200, data)).catch((error) => sendJson(response, 502, {
+        error: error.message, upstreamStatus: error.status || null,
+      }));
+      return;
+    }
+
+    if (pathname === '/api/toss/leaders' && request.method === 'GET') {
+      fetchTossLeaders().then((data) => sendJson(response, 200, data)).catch((error) => sendJson(response, 502, { error: error.message }));
+      return;
+    }
+
     const filePath = safeFilePath(pathname);
 
     if (!filePath) {
@@ -217,4 +344,4 @@ function resetTossAuthForTests() {
   authFailure = { message: null, retryAt: 0, status: null };
 }
 
-module.exports = { createServer, safeFilePath, fetchTossPrices, getTossAccessToken, requestTossPrices, resetTossAuthForTests };
+module.exports = { createServer, safeFilePath, fetchTossPrices, fetchTossSectorFlow, fetchTossMarketSummary, fetchTossLeaders, calculateMarketIndicator, normalizeLeaderRankings, getTossAccessToken, requestTossPrices, resetTossAuthForTests };

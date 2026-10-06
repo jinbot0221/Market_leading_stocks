@@ -37,9 +37,16 @@ const stocks = [
   { name: 'HD현대일렉트릭', code: '267260', market: 'KOSPI', price: 287500, change: 5.12, volume: '2,651억', strength: 89, icon: 'HD' },
   { name: '알테오젠', code: '196170', market: 'KOSDAQ', price: 176300, change: 4.44, volume: '1,984억', strength: 84, icon: '알' },
   { name: '에코프로비엠', code: '247540', market: 'KOSDAQ', price: 224000, change: 3.71, volume: '1,723억', strength: 79, icon: 'E' },
+  { name: '삼성전자', code: '005930', market: 'KOSPI', price: 72000, change: 1.42, volume: '1.4조', strength: 77, icon: '삼' },
+  { name: '한화에어로스페이스', code: '012450', market: 'KOSPI', price: 321000, change: 2.86, volume: '1,510억', strength: 75, icon: '한' },
+  { name: '현대로템', code: '064350', market: 'KOSPI', price: 68400, change: 2.14, volume: '1,320억', strength: 73, icon: '현' },
+  { name: '레인보우로보틱스', code: '277810', market: 'KOSDAQ', price: 198000, change: 1.92, volume: '1,180억', strength: 71, icon: 'R' },
+  { name: 'NAVER', code: '035420', market: 'KOSPI', price: 184500, change: 1.28, volume: '1,020억', strength: 69, icon: 'N' },
 ];
+let leaderStocks = stocks;
 
 const formatPrice = (value) => new Intl.NumberFormat('ko-KR').format(value);
+let sectorDetailTimer;
 
 function renderSectors(filter = 'ALL') {
   const visible = filter === 'STRONG' ? sectors.filter((sector) => sector.strength >= 60)
@@ -52,7 +59,7 @@ function renderSectors(filter = 'ALL') {
       : sector.strength >= 70 ? 'flow-large'
         : sector.strength >= 50 ? 'flow-medium' : 'flow-normal';
     return `
-    <article class="sector-card ${sizeClass}" style="--flow:${sector.strength};--flow-opacity:${(sector.strength / 500).toFixed(3)}" aria-label="${sector.name}, 수급 집중도 ${sector.strength}">
+    <article class="sector-card ${sizeClass}" tabindex="0" data-sector="${sector.name}" style="--flow:${sector.strength};--flow-opacity:${(sector.strength / 500).toFixed(3)}" aria-label="${sector.name}, 수급 집중도 ${sector.strength}, 상세 종목 보기">
       <span class="sector-rank">${String(index + 1).padStart(2, '0')}</span>
       <div class="sector-title"><h3>${sector.name}</h3><span class="flow-badge">수급 ${sector.strength}</span></div>
       <span class="change ${changeClass}">${changeSign}${sector.change.toFixed(2)}%</span>
@@ -60,15 +67,73 @@ function renderSectors(filter = 'ALL') {
     </article>`;
   }).join('');
   document.querySelector('#visibleSectorCount').textContent = `${visible.length}개`;
+  document.querySelectorAll('.sector-card').forEach((card) => {
+    card.addEventListener('click', () => showSectorDetail(card.dataset.sector));
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showSectorDetail(card.dataset.sector); }
+    });
+  });
 }
 
+async function showSectorDetail(sectorName, shouldScroll = true) {
+  clearTimeout(sectorDetailTimer);
+  const detail = document.querySelector('#sectorDetail');
+  const container = document.querySelector('#detailStocks');
+  const components = window.SECTOR_STOCKS?.[sectorName] || [];
+  document.querySelector('#detailTitle').textContent = `${sectorName} 거래대금 상위 10종목`;
+  detail.hidden = false;
+  container.innerHTML = '<p class="detail-loading">종목 데이터를 불러오는 중입니다.</p>';
+  if (shouldScroll) detail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  let flows = [];
+  try {
+    const response = await fetch(`/api/toss/sector-flow?symbols=${components.map(([code]) => code).join(',')}`);
+    const data = await response.json();
+    if (response.ok && data.mode === 'live') flows = data.result;
+  } catch { /* DEMO 가격으로 계속 표시합니다. */ }
+
+  const ordered = flows.length ? [...components].sort((a, b) => flows.findIndex((flow) => flow.symbol === a[0]) - flows.findIndex((flow) => flow.symbol === b[0])) : components;
+  container.innerHTML = ordered.map(([code, name], index) => {
+    const flow = flows.find((item) => item.symbol === code);
+    const price = flow?.lastPrice ? `${formatPrice(Number(flow.lastPrice))}원` : '연결 후 표시';
+    const traded = flow ? `${formatPrice(Math.round(flow.tradingValue / 100000000))}억원` : '거래대금 대기';
+    return `<article><b>${index + 1}</b><div><strong>${name}</strong><small>${code}</small></div><span>${price}</span><em>${traded}</em></article>`;
+  }).join('');
+  sectorDetailTimer = window.setTimeout(() => {
+    if (!detail.hidden) showSectorDetail(sectorName, false);
+  }, 30000);
+}
+
+document.querySelector('#closeDetail').addEventListener('click', () => {
+  clearTimeout(sectorDetailTimer);
+  document.querySelector('#sectorDetail').hidden = true;
+});
+
 function renderStocks(market = 'ALL') {
-  const filtered = market === 'ALL' ? stocks : stocks.filter((stock) => stock.market === market);
+  const marketStocks = market === 'ALL' ? leaderStocks : leaderStocks.filter((stock) => stock.market === market);
+  const filtered = marketStocks.slice(0, 10);
   document.querySelector('#stockTable').innerHTML = filtered.map((stock, index) => `
     <tr>
       <td><div class="stock-name"><span>${index + 1}</span><span class="ticker-icon">${stock.icon}</span><span><b>${stock.name}</b><small>${stock.code} · ${stock.market}</small></span></div></td>
-      <td>${formatPrice(stock.price)}</td><td class="up">+${stock.change.toFixed(2)}%</td><td>${stock.volume}</td><td><span class="strength-pill">${stock.strength}</span></td>
+      <td>${formatPrice(stock.price)}</td><td class="${stock.change >= 0 ? 'up' : 'down'}">${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)}%</td><td>${stock.volume}</td><td><span class="strength-pill">${stock.strength}</span></td>
     </tr>`).join('');
+}
+
+async function updateLeaders() {
+  try {
+    const response = await fetch('/api/toss/leaders');
+    const data = await response.json();
+    if (!response.ok || data.mode !== 'live' || !data.result.length) return;
+    leaderStocks = data.result.map((stock, index) => ({
+      ...stock,
+      volume: stock.tradingAmount >= 1e12
+        ? `${(stock.tradingAmount / 1e12).toFixed(1)}조`
+        : `${formatPrice(Math.round(stock.tradingAmount / 1e8))}억`,
+      strength: Math.max(60, 100 - index),
+      icon: stock.name.slice(0, 1),
+    }));
+    renderStocks(document.querySelector('.tabs button.active').dataset.market);
+  } catch { /* 기존 목록을 유지하고 다음 갱신에서 재시도합니다. */ }
 }
 
 function renderSparklines() {
@@ -122,7 +187,7 @@ async function connectToss() {
     document.querySelector('#connectionLabel').textContent = '토스 연결 오류';
     document.querySelector('#connectionMode').textContent = 'OFF';
     document.querySelector('#connectionStatus').title = reason;
-    document.querySelector('#refreshStatus').textContent = `${reason} · ${error.retryAfter || 1}초 후 재시도`;
+    document.querySelector('#refreshStatus').textContent = `${reason} · ${error.retryAfter || 3}초 후 재시도`;
     const help = document.querySelector('#connectionHelp');
     const title = document.createElement('strong');
     const description = document.createElement('span');
@@ -149,10 +214,31 @@ async function updateRecorderStatus() {
   }
 }
 
+async function updateMarketSummary() {
+  try {
+    const response = await fetch('/api/toss/market-summary');
+    const data = await response.json();
+    if (!response.ok || data.mode !== 'live') return;
+    data.result.forEach((market) => {
+      const prefix = market.symbol.toLowerCase();
+      const price = document.querySelector(`#${prefix}Price`);
+      const change = document.querySelector(`#${prefix}Change`);
+      const chart = document.querySelector(`#${prefix}Chart`);
+      const isUp = market.changeRate >= 0;
+      price.textContent = new Intl.NumberFormat('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(market.lastPrice);
+      change.textContent = `${isUp ? '+' : ''}${market.changeRate.toFixed(2)}%`;
+      change.className = isUp ? 'up' : 'down';
+      chart.className = `sparkline ${isUp ? 'green' : 'red'}`;
+      if (market.series.length > 1) chart.dataset.series = market.series.join(',');
+    });
+    renderSparklines();
+  } catch { /* 연결 상태는 토스 가격 요청에서 별도로 표시합니다. */ }
+}
+
 function startAutoRefresh() {
   const refresh = async () => {
-    await Promise.all([connectToss(), updateRecorderStatus()]);
-    window.setTimeout(refresh, 1000);
+    await Promise.all([connectToss(), updateRecorderStatus(), updateMarketSummary(), updateLeaders()]);
+    window.setTimeout(refresh, 3000);
   };
   refresh();
 }
@@ -195,7 +281,7 @@ document.querySelector('#refreshButton').addEventListener('click', async (event)
   event.currentTarget.classList.add('loading');
   updateClock();
   const toast = document.querySelector('#toast');
-  await Promise.all([connectToss(), updateRecorderStatus()]);
+  await Promise.all([connectToss(), updateRecorderStatus(), updateMarketSummary(), updateLeaders()]);
   toast.textContent = document.querySelector('#connectionMode').textContent === 'LIVE'
     ? '최신 데이터를 불러왔습니다.' : '연결 상태를 확인해 주세요.';
   toast.classList.add('show');
